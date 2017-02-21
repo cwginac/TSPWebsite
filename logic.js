@@ -10,7 +10,11 @@ var cities = [];
 var variables = {};
 
 function initialize () {
+	document.getElementById('textinput').disabled = true;
+	document.getElementById('parseData').disabled = true;
+	document.getElementById('clearData').disabled = true;
 
+	
 	variables.data = new google.visualization.DataTable();
 	variables.data.addColumn('number', 'X');
 	variables.data.addColumn('number', 'Current Best');
@@ -184,6 +188,12 @@ class Population {
 		this.pop.splice (populationSize, populationSize);
 
 		this.currentGen++;
+
+		if (this.currentGen	=== maxGens) {
+			document.getElementById('textinput').disabled = false;
+			document.getElementById('parseData').disabled = false;
+			document.getElementById('clearData').disabled = false;
+		}
 	}
 
 	updateChart () {
