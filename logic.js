@@ -1,15 +1,22 @@
 'use strict';
 
-var populationSize = 100;
+var populationSize = 1000;
 var maxGens = 150;
 
-var pmut = 0.50;
+var pmut = 0.01;
 
 var cities = [];
 
 var variables = {};
 
+var difference = 0;
+var timesDifference = 0;
+
 function initialize () {
+	cities = [];
+
+	variables = {};
+
 	document.getElementById('textinput').disabled = true;
 	document.getElementById('parseData').disabled = true;
 	document.getElementById('clearData').disabled = true;
@@ -36,24 +43,21 @@ function initialize () {
 
 	variables.chart = new google.visualization.LineChart(document.getElementById('linechart_div'));
 
+	variables.map = new google.visualization.LineChart(document.getElementById('map_div'));
+
 	parseData();
+
+	/*
+	var bestIndiv = new Individual();
+
+	bestIndiv.createBestTour ();
+	bestIndiv.calculateTourLength ();
+
+	alert (bestIndiv.tsp.length); */
+
 	var pop = new Population();
 
-	// method to generate an function reference with properly scoped variables
-	var fnGenerator = function(pop) {
-	    var wrapperFn = function() {
-	        pop.generation();
-	        pop.updateChart();
-	    };
-	    return wrapperFn;
-	};
-
-	// call the generator and return the wrapping function
-	var fnToCall = fnGenerator(pop);
-
-	for (var c = 0; c < 1000; c++) {
-		setTimeout(fnToCall, 10);
-	}
+	pop.generation();
 }
 
 function parseData () {
@@ -101,6 +105,39 @@ class Individual {
 		}
 	}
 
+	copy (indiv) {
+		this.tsp.tour = [];
+		for (var c = 0; c < indiv.tsp.tour.length; c++) {
+			var tempCity = {
+				node: indiv.tsp.tour[c].node,
+				x: indiv.tsp.tour[c].x,
+				y: indiv.tsp.tour[c].y
+			};
+
+			this.tsp.tour.push (tempCity);
+		}
+	}
+
+/*
+	createBestTour () {
+		var bestTour = '1,49,32,45,19,41,8,9,10,43,33,51,11,52,14,13,47,26,27,28,12,25,4,6,15,5,24,48,38,37,40,39,36,35,34,44,46,16,29,50,20,23,30,2,7,42,21,17,3,18,31,22';
+		var bestArray = bestTour.split (',');
+
+		var current = 0;
+		while (current < this.cities.length) {
+			var city = bestArray[current] - 1;
+
+			current++;
+			var currentCity = {
+				node: this.cities[city].node,
+				x: this.cities[city].x,
+				y: this.cities[city].y
+			};
+
+			this.tsp.tour.push(currentCity);
+		}
+	}
+*/
 	createTour () {
 		while (this.cities.length > 0) {
 			var city = Math.floor (Math.random() * this.cities.length);
@@ -122,7 +159,7 @@ class Individual {
 		for (var c = 0; c < this.tsp.tour.length - 1; c++) {
 			var currentLegX = this.tsp.tour[c+1].x - this.tsp.tour[c].x;
 			var currentLegY = this.tsp.tour[c+1].y - this.tsp.tour[c].y;
-			var currentLeg = Math.sqrt((currentLegX*currentLegX) + (currentLegY*currentLegY));
+			var currentLeg = Math.floor(Math.sqrt((currentLegX*currentLegX) + (currentLegY*currentLegY)));
 
 			tourLength += currentLeg;
 		}
@@ -171,14 +208,20 @@ class Population {
 		});
 
 		this.currentGen = 0;
+		this.currentBest = 0;
+		this.currentAverage = 1;
+
+		this.bestIndiv = new Individual(this.pop[0]);
+		this.bestIndiv.calculateTourLength();
 	}
 
 	generation () {
-		for (var c = 0; c < populationSize; c++) {
-			var newCity = new Individual (this.pop[c]);
-			newCity.mutate ();
-			newCity.calculateTourLength ();
-			this.pop.push (newCity);
+		for (var c = 0; c < populationSize / 2; c++) {
+			this.pmx();
+		}
+
+		for (var d = 1; d < populationSize; d++) {
+			this.pop[d].mutate();
 		}
 
 		this.pop.sort (function (a, b) {
@@ -187,12 +230,114 @@ class Population {
 
 		this.pop.splice (populationSize, populationSize);
 
+		if(this.pop[0].tsp.length < this.bestIndiv.tsp.length) {
+			this.bestIndiv.copy(this.pop[0]);
+			this.bestIndiv.calculateTourLength();
+		}
+
 		this.currentGen++;
 
-		if (this.currentGen	=== maxGens) {
+		this.updateChart();
+
+		// method to generate an function reference with properly scoped variables
+		var fnGenerator = function(population) {
+		    var wrapperFn = function() {
+		        population.generation();
+		    };
+		    return wrapperFn;
+		};
+
+		// call the generator and return the wrapping function
+		var fnToCall = fnGenerator(this);
+
+		if (difference == Math.floor(this.currentAverage) - Math.floor(this.currentBest)) {
+			timesDifference++;
+		}
+		else {
+			timesDifference = 0;
+			difference = Math.floor(this.currentAverage) - Math.floor(this.currentBest);
+		}
+
+		//if (this.currentGen < 500) {
+		//if (this.currentAverage > (this.currentBest) * 1.001) {
+		if (timesDifference < 10) {
+			setTimeout(fnToCall, 10);
+		}
+		else {
 			document.getElementById('textinput').disabled = false;
 			document.getElementById('parseData').disabled = false;
 			document.getElementById('clearData').disabled = false;
+		}
+	}
+
+	pmx () {
+		var child1 = new Individual();
+		var child2 = new Individual();
+		
+		child1.copy (this.pop[this.getWeightedParent()]);
+		child2.copy (this.pop[this.getWeightedParent()]);
+
+		var xOver1 = Math.floor(Math.random() * child1.cities.length);
+		var xOver2 = Math.floor(Math.random() * child1.cities.length);
+
+		for (var c = Math.min (xOver1, xOver2); c < Math.max (xOver1, xOver2); c++) {
+			var tempValue = 0;
+			for (var d = 0; d < child1.tsp.tour.length; d++) {
+				if (child1.tsp.tour[d].node == child2.tsp.tour[c].node) {
+					tempValue = d;
+				}
+			}
+
+			var tempCity = {
+				node: child1.tsp.tour[c].node,
+				x: child1.tsp.tour[c].x,
+				y: child1.tsp.tour[c].y
+			};
+
+			child1.tsp.tour[tempValue].node = child1.tsp.tour[c].node;
+			child1.tsp.tour[tempValue].x = child1.tsp.tour[c].x;
+			child1.tsp.tour[tempValue].y = child1.tsp.tour[c].y;
+
+			for (var e = 0; e < child2.tsp.tour.length; e++) {
+				if (child2.tsp.tour[e].node == child1.tsp.tour[c].node) {
+					tempValue = e;
+				}
+			}
+
+			child2.tsp.tour[tempValue].node = child2.tsp.tour[c].node;
+			child2.tsp.tour[tempValue].x = child2.tsp.tour[c].x;
+			child2.tsp.tour[tempValue].y = child2.tsp.tour[c].y;
+
+			child1.tsp.tour[c].node = child2.tsp.tour[c].node;
+			child1.tsp.tour[c].x = child2.tsp.tour[c].x;
+			child1.tsp.tour[c].y = child2.tsp.tour[c].y;
+
+			child2.tsp.tour[c].node = tempCity.node;
+			child2.tsp.tour[c].x = tempCity.x;
+			child2.tsp.tour[c].y = tempCity.y;
+		}
+
+		//child1.mutate();
+		child1.calculateTourLength();
+
+		//child2.mutate();
+		child2.calculateTourLength();
+
+		this.pop.push(child1);
+		this.pop.push(child2);
+	}
+
+	getWeightedParent () {
+		var totalWeight = (populationSize*(populationSize + 1))/2;
+
+		var random = Math.floor (Math.random () * totalWeight);
+
+		var currentWeight = 0;
+		for (var c = 0; c < populationSize; c++) {
+			currentWeight += (populationSize - c);
+			if(random < currentWeight) {
+				return c;
+			}
 		}
 	}
 
@@ -206,7 +351,23 @@ class Population {
 
 		averageTourLength /= populationSize;
 
+		this.currentBest = bestTourLength;
+		this.currentAverage = averageTourLength;
+
 		variables.data.addRow([this.currentGen, bestTourLength, averageTourLength]);
 		variables.chart.draw(variables.data, variables.options);
+		document.getElementById('average').innerHTML = "Average: " + Math.floor(averageTourLength).toString();
+		document.getElementById('best').innerHTML = "Best: " + Math.floor(bestTourLength).toString();
+
+		variables.mapData = new google.visualization.DataTable();
+		variables.mapData.addColumn('number', 'X');
+		variables.mapData.addColumn('number', 'Y');
+
+		for (var d = 0; d < this.bestIndiv.tsp.tour.length; d++) {
+			variables.mapData.addRow([parseInt(this.bestIndiv.tsp.tour[d].x, 10), parseInt(this.bestIndiv.tsp.tour[d].y, 10)]);	
+		}
+
+		variables.map.draw(variables.mapData);
+		
 	}
 }
