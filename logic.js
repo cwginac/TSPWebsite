@@ -3,7 +3,8 @@
 var populationSize = 1000;
 var maxGens = 150;
 
-var pmut = 0.01;
+var pMut = 0.01;
+var pCross = 1.0;
 
 var cities = [];
 
@@ -11,6 +12,8 @@ var variables = {};
 
 var difference = 0;
 var timesDifference = 0;
+
+var runs = [];
 
 function initialize () {
 	cities = [];
@@ -21,6 +24,24 @@ function initialize () {
 	document.getElementById('parseData').disabled = true;
 	document.getElementById('clearData').disabled = true;
 
+	var popSizeString = document.getElementById('popSize').value;
+	var popSizeTempValue = parseInt(popSizeString, 10);
+	var pCrossString = document.getElementById('pCross').value;
+	var pCrossTempValue = parseInt(pCrossString, 10);
+	var pMutString = document.getElementById('pMut').value;
+	var pMutTempValue = parseInt(pMutString, 10);
+
+	if(!isNaN(popSizeTempValue) && popSizeTempValue > 500) {
+		populationSize = popSizeTempValue;
+	}
+
+	if(!isNaN(pCrossTempValue) && pCrossTempValue >= 0 && pCrossTempValue <= 1) {
+		pCross = pCrossTempValue;
+	}
+
+	if(!isNaN(pMutTempValue) && pMutTempValue >= 0 && pMutTempValue <= 1) {
+		pMut = pMutTempValue;
+	}
 	
 	variables.data = new google.visualization.DataTable();
 	variables.data.addColumn('number', 'X');
@@ -71,11 +92,13 @@ function parseData () {
 
 		var curCityArray = cityArray[c].split(' ');
 
-		currentCity.node = curCityArray[0];
-		currentCity.x = curCityArray[1];
-		currentCity.y = curCityArray[2];
+		if(!isNaN(parseInt(curCityArray[0]))) {
+			currentCity.node = curCityArray[0];
+			currentCity.x = curCityArray[1];
+			currentCity.y = curCityArray[2];
 
-		cities.push(currentCity);
+			cities.push(currentCity);
+		}
 	}
 }
 
@@ -138,7 +161,17 @@ class Individual {
 		}
 	}
 */
+
 	createTour () {
+		var firstCity = {
+			node: this.cities[0].node,
+			x: this.cities[0].x,
+			y: this.cities[0].y
+		};
+
+		this.tsp.tour.push(firstCity);
+		this.cities.splice(0, 1);
+
 		while (this.cities.length > 0) {
 			var city = Math.floor (Math.random() * this.cities.length);
 
@@ -151,6 +184,8 @@ class Individual {
 			this.tsp.tour.push(currentCity);
 			this.cities.splice(city, 1);
 		}
+
+		this.tsp.tour.push(firstCity);
 	}
 
 	calculateTourLength () {
@@ -168,25 +203,63 @@ class Individual {
 	}
 
 	mutate () {
-		for (var c = 0; c < this.tsp.tour.length; c++) {
+		for (var c = 1; c < this.tsp.tour.length - 1; c++) {
 			var mutation = Math.random();
 
-			if (mutation < pmut) {
-				var swap = Math.floor(Math.random() * this.tsp.tour.length);
+			if (mutation < pMut) {
+				var swap = Math.floor(Math.random() * (this.tsp.tour.length - 2)) + 1;
 
-				var tempCity = {
-					node: this.tsp.tour[swap].node,
-					x: this.tsp.tour[swap].x,
-					y: this.tsp.tour[swap].y
-				};
+				var leg1x = this.tsp.tour[c].x - this.tsp.tour[c-1].x;
+				var leg1y = this.tsp.tour[c].y - this.tsp.tour[c-1].y;
+				var leg1 = Math.floor(Math.sqrt((leg1x*leg1x) + (leg1y*leg1y)));
 
-				this.tsp.tour[swap].node = this.tsp.tour[c].node;
-				this.tsp.tour[swap].x = this.tsp.tour[c].x;
-				this.tsp.tour[swap].y = this.tsp.tour[c].y;
+				var leg2x = this.tsp.tour[c+1].x - this.tsp.tour[c].x;
+				var leg2y = this.tsp.tour[c+1].y - this.tsp.tour[c].y;
+				var leg2 = Math.floor(Math.sqrt((leg2x*leg2x) + (leg2y*leg2y)));
 
-				this.tsp.tour[c].node = tempCity.node;
-				this.tsp.tour[c].x = tempCity.x;
-				this.tsp.tour[c].y = tempCity.y;
+				var leg3x = this.tsp.tour[swap].x - this.tsp.tour[swap-1].x;
+				var leg3y = this.tsp.tour[swap].y - this.tsp.tour[swap-1].y;
+				var leg3 = Math.floor(Math.sqrt((leg3x*leg3x) + (leg3y*leg3y)));
+
+				var leg4x = this.tsp.tour[swap+1].x - this.tsp.tour[swap].x;
+				var leg4y = this.tsp.tour[swap+1].y - this.tsp.tour[swap].y;
+				var leg4 = Math.floor(Math.sqrt((leg4x*leg4x) + (leg4y*leg4y)));
+
+				var oldLength = leg1 + leg2 + leg3 + leg4;
+
+				leg1x = this.tsp.tour[swap].x - this.tsp.tour[c-1].x;
+				leg1y = this.tsp.tour[swap].y - this.tsp.tour[c-1].y;
+				leg1 = Math.floor(Math.sqrt((leg1x*leg1x) + (leg1y*leg1y)));
+
+				leg2x = this.tsp.tour[c+1].x - this.tsp.tour[swap].x;
+				leg2y = this.tsp.tour[c+1].y - this.tsp.tour[swap].y;
+				leg2 = Math.floor(Math.sqrt((leg2x*leg2x) + (leg2y*leg2y)));
+
+				leg3x = this.tsp.tour[c].x - this.tsp.tour[swap-1].x;
+				leg3y = this.tsp.tour[c].y - this.tsp.tour[swap-1].y;
+				leg3 = Math.floor(Math.sqrt((leg3x*leg3x) + (leg3y*leg3y)));
+
+				leg4x = this.tsp.tour[swap+1].x - this.tsp.tour[c].x;
+				leg4y = this.tsp.tour[swap+1].y - this.tsp.tour[c].y;
+				leg4 = Math.floor(Math.sqrt((leg4x*leg4x) + (leg4y*leg4y)));
+
+				var newLength = leg1 + leg2 + leg3 + leg4;
+
+				if (newLength < oldLength) {
+					var tempCity = {
+						node: this.tsp.tour[swap].node,
+						x: this.tsp.tour[swap].x,
+						y: this.tsp.tour[swap].y
+					};
+
+					this.tsp.tour[swap].node = this.tsp.tour[c].node;
+					this.tsp.tour[swap].x = this.tsp.tour[c].x;
+					this.tsp.tour[swap].y = this.tsp.tour[c].y;
+
+					this.tsp.tour[c].node = tempCity.node;
+					this.tsp.tour[c].x = tempCity.x;
+					this.tsp.tour[c].y = tempCity.y;
+				}
 			}
 		}
 	}
@@ -267,6 +340,8 @@ class Population {
 			document.getElementById('textinput').disabled = false;
 			document.getElementById('parseData').disabled = false;
 			document.getElementById('clearData').disabled = false;
+			
+			console.log (runs);
 		}
 	}
 
@@ -277,8 +352,8 @@ class Population {
 		child1.copy (this.pop[this.getWeightedParent()]);
 		child2.copy (this.pop[this.getWeightedParent()]);
 
-		var xOver1 = Math.floor(Math.random() * child1.cities.length);
-		var xOver2 = Math.floor(Math.random() * child1.cities.length);
+		var xOver1 = Math.floor(Math.random() * (child1.cities.length - 2)) + 1;
+		var xOver2 = Math.floor(Math.random() * (child1.cities.length - 2)) + 1;
 
 		for (var c = Math.min (xOver1, xOver2); c < Math.max (xOver1, xOver2); c++) {
 			var tempValue = 0;
@@ -358,6 +433,7 @@ class Population {
 		variables.chart.draw(variables.data, variables.options);
 		document.getElementById('average').innerHTML = "Average: " + Math.floor(averageTourLength).toString();
 		document.getElementById('best').innerHTML = "Best: " + Math.floor(bestTourLength).toString();
+		document.getElementById('diff').innerHTML = "Difference: " + Math.floor(averageTourLength - bestTourLength).toString();
 
 		variables.mapData = new google.visualization.DataTable();
 		variables.mapData.addColumn('number', 'X');
